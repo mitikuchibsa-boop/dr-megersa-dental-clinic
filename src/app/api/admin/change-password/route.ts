@@ -1,13 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import bcrypt from "bcryptjs";
-import { getAdminPasswordHash, setAdminPasswordHash } from "@/lib/db";
-import { verifySession } from "@/lib/auth";
+import { verifySession, verifyAdminPassword, setCustomPassword } from "@/lib/auth";
 
 export async function POST(req: NextRequest) {
   try {
     const isAuth = await verifySession();
     if (!isAuth) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "Unauthorized session. Please log in again." }, { status: 401 });
     }
 
     const body = await req.json();
@@ -15,7 +13,7 @@ export async function POST(req: NextRequest) {
 
     if (!currentPassword || !newPassword || !confirmPassword) {
       return NextResponse.json(
-        { error: "Please fill in all password fields." },
+        { error: "Please complete all password fields." },
         { status: 400 }
       );
     }
@@ -34,26 +32,22 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const storedHash = await getAdminPasswordHash();
-    const isMatch = await bcrypt.compare(currentPassword, storedHash);
-
-    if (!isMatch) {
+    const currentVerify = await verifyAdminPassword(currentPassword);
+    if (!currentVerify.valid) {
       return NextResponse.json(
         { error: "Current password is incorrect." },
         { status: 400 }
       );
     }
 
-    const salt = await bcrypt.genSalt(10);
-    const newHash = await bcrypt.hash(newPassword, salt);
-    await setAdminPasswordHash(newHash);
+    await setCustomPassword(newPassword);
 
     return NextResponse.json({
       success: true,
-      message: "Password changed successfully. Please keep your new password safe.",
+      message: "Admin password updated successfully. Please keep your new password in a safe place.",
     });
   } catch (error: any) {
-    console.error("Change password error:", error);
+    console.error("Change password route error:", error);
     return NextResponse.json(
       { error: "Failed to update password." },
       { status: 500 }

@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { MessageSquareText } from "lucide-react";
+import { MessageSquareText, Sparkles, ArrowRight } from "lucide-react";
 
 interface PatientExperienceProps {
   onContactClick: () => void;
@@ -9,27 +9,29 @@ interface PatientExperienceProps {
 
 export function PatientExperience({ onContactClick }: PatientExperienceProps) {
   return (
-    <section className="py-14 md:py-20 bg-cream-50">
+    <section className="py-14 md:py-20 relative overflow-hidden">
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-        <div className="bg-sand-100 rounded-2xl p-8 sm:p-12 border border-sand-200 shadow-subtle">
+        
+        <div className="glass-panel rounded-3xl p-8 sm:p-12 md:p-14 border border-white/90 shadow-floating relative">
           
-          <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-burgundy-50 border border-burgundy-100 text-burgundy-700 mb-5">
-            <MessageSquareText className="w-6 h-6" />
+          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-gradient-to-tr from-cyan-100 via-mint-100 to-white border border-mint-300 text-teal-700 mb-6 shadow-subtle">
+            <MessageSquareText className="w-7 h-7" />
           </div>
 
-          <h2 className="font-editorial text-2xl sm:text-3xl md:text-4xl font-bold text-charcoal-900 mb-4">
+          <h2 className="font-serif text-2xl sm:text-3xl md:text-4xl font-bold text-slate-900 mb-4 tracking-tight">
             Not sure which service you need?
           </h2>
 
-          <p className="text-base sm:text-lg text-charcoal-700 max-w-2xl mx-auto leading-relaxed mb-8">
+          <p className="text-base sm:text-lg text-slate-600 max-w-2xl mx-auto leading-relaxed mb-8">
             Tell us what is bothering you. Contact our clinic and explain your concern. We can discuss the next step with you.
           </p>
 
           <button
             onClick={onContactClick}
-            className="inline-flex items-center justify-center px-6 py-3.5 text-base font-semibold text-white bg-burgundy-700 hover:bg-burgundy-800 rounded-md shadow-sm transition-all focus:outline-none focus:ring-2 focus:ring-burgundy-600 focus:ring-offset-2"
+            className="btn-primary-glow inline-flex items-center justify-center px-8 py-3.5 text-base font-semibold rounded-xl"
           >
-            Ask About Your Dental Care
+            <span>Ask About Your Dental Care</span>
+            <ArrowRight className="w-4 h-4 ml-2" />
           </button>
 
         </div>

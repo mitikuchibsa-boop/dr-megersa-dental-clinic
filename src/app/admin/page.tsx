@@ -4,6 +4,14 @@ import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { clinicConfig } from "@/config/clinic";
 import {
+  getStoredInquiries,
+  deleteStoredInquiry,
+  clearAllStoredInquiries,
+  resetStoredInquiries,
+  DemoInquiry,
+  MAX_DEMO_INQUIRIES,
+} from "@/lib/storage";
+import {
   Lock,
   KeyRound,
   LogOut,
@@ -20,19 +28,12 @@ import {
   RefreshCw,
   Send,
   X,
+  Trash2,
+  Info,
+  Sparkles,
+  HelpCircle,
   ShieldCheck,
 } from "lucide-react";
-
-interface Lead {
-  id: string;
-  fullName: string;
-  phone: string;
-  telegramUsername: string | null;
-  service: string;
-  preferredDate: string | null;
-  createdAt: string;
-  status: string;
-}
 
 export default function AdminPage() {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
@@ -40,16 +41,13 @@ export default function AdminPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [loginError, setLoginError] = useState<string | null>(null);
   const [loginLoading, setLoginLoading] = useState(false);
+  const [showRecoveryHelp, setShowRecoveryHelp] = useState(false);
 
-  // Leads list
-  const [leads, setLeads] = useState<Lead[]>([]);
-  const [leadsLoading, setLeadsLoading] = useState(false);
-  const [leadsError, setLeadsError] = useState<string | null>(null);
+  // Inquiries from browser storage
+  const [inquiries, setInquiries] = useState<DemoInquiry[]>([]);
+  const [selectedInquiry, setSelectedInquiry] = useState<DemoInquiry | null>(null);
 
-  // Selected lead modal
-  const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
-
-  // Change password modal/view
+  // Change password modal
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -58,43 +56,25 @@ export default function AdminPage() {
   const [passwordChangeSuccess, setPasswordChangeSuccess] = useState<string | null>(null);
   const [passwordChangeError, setPasswordChangeError] = useState<string | null>(null);
 
-  // Check initial authentication
+  // Check auth on mount
+  useEffect(() => {
+    checkAuth();
+    loadInquiries();
+  }, []);
+
   const checkAuth = async () => {
     try {
       const res = await fetch("/api/admin/check-auth");
       const data = await res.json();
       setIsAuthenticated(data.authenticated);
-      if (data.authenticated) {
-        fetchLeads();
-      }
     } catch {
       setIsAuthenticated(false);
     }
   };
 
-  useEffect(() => {
-    checkAuth();
-  }, []);
-
-  const fetchLeads = async () => {
-    setLeadsLoading(true);
-    setLeadsError(null);
-    try {
-      const res = await fetch("/api/leads");
-      if (!res.ok) {
-        if (res.status === 401) {
-          setIsAuthenticated(false);
-          return;
-        }
-        throw new Error("Failed to load leads");
-      }
-      const data = await res.json();
-      setLeads(data.leads || []);
-    } catch (err: any) {
-      setLeadsError(err.message || "Failed to load leads list");
-    } finally {
-      setLeadsLoading(false);
-    }
+  const loadInquiries = () => {
+    const list = getStoredInquiries();
+    setInquiries(list);
   };
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -106,7 +86,7 @@ export default function AdminPage() {
       const res = await fetch("/api/admin/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ password }),
+        body: JSON.stringify({ password: password.trim() }),
       });
 
       const data = await res.json();
@@ -116,7 +96,7 @@ export default function AdminPage() {
 
       setIsAuthenticated(true);
       setPassword("");
-      fetchLeads();
+      loadInquiries();
     } catch (err: any) {
       setLoginError(err.message || "Invalid credentials");
     } finally {
@@ -129,9 +109,31 @@ export default function AdminPage() {
       await fetch("/api/admin/logout", { method: "POST" });
     } finally {
       setIsAuthenticated(false);
-      setLeads([]);
-      setSelectedLead(null);
+      setSelectedInquiry(null);
     }
+  };
+
+  const handleDeleteInquiry = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const updated = deleteStoredInquiry(id);
+    setInquiries(updated);
+    if (selectedInquiry?.id === id) {
+      setSelectedInquiry(null);
+    }
+  };
+
+  const handleClearAll = () => {
+    if (confirm("Are you sure you want to clear all stored demo inquiries?")) {
+      const updated = clearAllStoredInquiries();
+      setInquiries(updated);
+      setSelectedInquiry(null);
+    }
+  };
+
+  const handleResetSamples = () => {
+    const updated = resetStoredInquiries();
+    setInquiries(updated);
+    setSelectedInquiry(null);
   };
 
   const handleChangePassword = async (e: React.FormEvent) => {
@@ -140,7 +142,7 @@ export default function AdminPage() {
     setPasswordChangeSuccess(null);
 
     if (newPassword !== confirmPassword) {
-      setPasswordChangeError("New password and confirm password do not match.");
+      setPasswordChangeError("New password and confirmation do not match.");
       return;
     }
 
@@ -164,10 +166,10 @@ export default function AdminPage() {
 
       const data = await res.json();
       if (!res.ok) {
-        throw new Error(data.error || "Failed to change password");
+        throw new Error(data.error || "Failed to update password");
       }
 
-      setPasswordChangeSuccess("Password updated successfully! Please keep it secure.");
+      setPasswordChangeSuccess("Password updated successfully.");
       setCurrentPassword("");
       setNewPassword("");
       setConfirmPassword("");
@@ -193,13 +195,13 @@ export default function AdminPage() {
     }
   };
 
-  // Loading state while checking auth
+  // Auth checking loading indicator
   if (isAuthenticated === null) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-cream-50">
-        <div className="flex items-center space-x-3 text-charcoal-700">
-          <RefreshCw className="w-5 h-5 animate-spin text-burgundy-700" />
-          <span className="text-sm font-medium">Checking admin session...</span>
+      <div className="min-h-screen flex items-center justify-center bg-mist-50">
+        <div className="flex items-center space-x-3 text-slate-700">
+          <RefreshCw className="w-5 h-5 animate-spin text-teal-600" />
+          <span className="text-sm font-medium">Verifying admin session...</span>
         </div>
       </div>
     );
@@ -208,46 +210,46 @@ export default function AdminPage() {
   // Login View
   if (!isAuthenticated) {
     return (
-      <div className="min-h-screen flex flex-col justify-center py-12 sm:px-6 lg:px-8 bg-cream-100/80">
-        <div className="sm:mx-auto sm:w-full sm:max-w-md px-4">
+      <div className="min-h-screen flex flex-col justify-center py-12 px-4 sm:px-6 lg:px-8 bg-mist-50/80 relative">
+        <div className="sm:mx-auto sm:w-full sm:max-w-md">
           
           <div className="text-center mb-8">
             <Link
               href="/"
-              className="inline-flex items-center space-x-1.5 text-xs font-semibold text-charcoal-600 hover:text-burgundy-700 mb-6 bg-sand-200/60 px-3 py-1.5 rounded-full transition-colors"
+              className="inline-flex items-center space-x-1.5 text-xs font-semibold text-slate-600 hover:text-teal-700 mb-6 bg-white px-3.5 py-1.5 rounded-full border border-mist-300 shadow-subtle transition-colors"
             >
               <ArrowLeft className="w-3.5 h-3.5" />
               <span>Back to Clinic Website</span>
             </Link>
 
-            <div className="mx-auto w-12 h-12 rounded-full bg-burgundy-50 border border-burgundy-100 flex items-center justify-center text-burgundy-700 mb-3 shadow-subtle">
+            <div className="mx-auto w-12 h-12 rounded-2xl bg-gradient-to-tr from-cyan-100 to-mint-100 border border-mint-300 flex items-center justify-center text-teal-700 mb-3 shadow-subtle">
               <Lock className="w-6 h-6" />
             </div>
 
-            <h1 className="font-editorial text-2xl sm:text-3xl font-bold text-charcoal-900">
-              Clinic Administration
+            <h1 className="font-serif text-2xl sm:text-3xl font-bold text-slate-900">
+              Clinic Showcase CRM
             </h1>
-            <p className="text-xs text-charcoal-600 mt-1">
-              {clinicConfig.name} · Simple CRM
+            <p className="text-xs text-slate-500 mt-1">
+              {clinicConfig.name} · Showcase Administration
             </p>
           </div>
 
-          <div className="bg-cream-50 py-8 px-6 sm:px-10 rounded-2xl border border-sand-300 shadow-card">
+          <div className="glass-panel py-8 px-6 sm:px-10 rounded-3xl border border-white/90 shadow-floating">
             
             {loginError && (
-              <div className="mb-6 p-3.5 rounded-lg bg-rose-50 border border-rose-200 text-rose-800 text-xs flex items-start space-x-2 animate-in fade-in">
+              <div className="mb-6 p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs flex items-start space-x-2 animate-in fade-in">
                 <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
                 <span>{loginError}</span>
               </div>
             )}
 
-            <form onSubmit={handleLogin} className="space-y-5">
+            <form onSubmit={handleLogin} className="space-y-4">
               <div>
                 <label
                   htmlFor="admin-password"
-                  className="block text-xs font-semibold text-charcoal-800 uppercase tracking-wider mb-2"
+                  className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5"
                 >
-                  Admin Password
+                  Admin Password or Recovery Key
                 </label>
                 <div className="relative">
                   <input
@@ -256,13 +258,13 @@ export default function AdminPage() {
                     required
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    placeholder="Enter clinic admin password"
-                    className="w-full pl-4 pr-10 py-3 rounded-lg bg-cream-50 border border-sand-300 text-charcoal-900 text-sm focus:outline-none focus:ring-2 focus:ring-burgundy-600"
+                    placeholder="Enter admin password or recovery key"
+                    className="w-full pl-4 pr-10 py-3 rounded-xl bg-white border border-mist-300 text-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 shadow-subtle"
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-3 text-charcoal-400 hover:text-charcoal-600"
+                    className="absolute right-3.5 top-3.5 text-slate-400 hover:text-slate-600"
                   >
                     {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
@@ -272,17 +274,48 @@ export default function AdminPage() {
               <button
                 type="submit"
                 disabled={loginLoading}
-                className="w-full flex justify-center items-center py-3 px-4 border border-transparent rounded-lg shadow-sm text-sm font-semibold text-white bg-burgundy-700 hover:bg-burgundy-800 disabled:bg-burgundy-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-burgundy-600 transition-colors"
+                className="btn-primary-glow w-full flex justify-center items-center py-3.5 px-4 rounded-xl text-sm font-semibold text-white disabled:opacity-50"
               >
-                {loginLoading ? "Authenticating..." : "Sign In to Lead Manager"}
+                {loginLoading ? "Verifying..." : "Sign In to Showcase Admin"}
               </button>
             </form>
 
-            <div className="mt-6 pt-6 border-t border-sand-200 text-center">
-              <p className="text-[11px] text-charcoal-500">
-                Initial password set via <code className="font-mono bg-sand-200/60 px-1 py-0.5 rounded text-charcoal-700">ADMIN_INITIAL_PASSWORD</code>.
-                Change your password inside after first login.
-              </p>
+            {/* Documented Password & Recovery Help Accordion */}
+            <div className="mt-6 pt-5 border-t border-mist-200">
+              <button
+                type="button"
+                onClick={() => setShowRecoveryHelp(!showRecoveryHelp)}
+                className="w-full flex items-center justify-between text-left text-xs font-semibold text-teal-700 hover:text-teal-800 focus:outline-none"
+              >
+                <span className="flex items-center space-x-1.5">
+                  <HelpCircle className="w-3.5 h-3.5 text-teal-600" />
+                  <span>Documented Login & Recovery Help</span>
+                </span>
+                <span>{showRecoveryHelp ? "Hide" : "Show"}</span>
+              </button>
+
+              {showRecoveryHelp && (
+                <div className="mt-3 p-3.5 rounded-xl bg-cyan-50/80 border border-cyan-200 text-xs text-slate-700 space-y-2 animate-in fade-in">
+                  <p className="font-semibold text-slate-900">Documented Credentials:</p>
+                  <ul className="list-disc list-inside space-y-1 text-[11px] text-slate-600">
+                    <li>
+                      <span className="font-medium text-slate-800">Initial Password:</span>{" "}
+                      <code className="bg-white px-1 py-0.5 rounded border border-cyan-200 font-mono text-teal-700">
+                        MegersaDental2026!Adama
+                      </code>
+                    </li>
+                    <li>
+                      <span className="font-medium text-slate-800">Emergency Recovery Key:</span>{" "}
+                      <code className="bg-white px-1 py-0.5 rounded border border-cyan-200 font-mono text-teal-700">
+                        MegersaRecovery2026!Adama
+                      </code>
+                    </li>
+                  </ul>
+                  <p className="text-[10px] text-slate-500 pt-1">
+                    Entering either credential above will authenticate access immediately without requiring server redeployment.
+                  </p>
+                </div>
+              )}
             </div>
 
           </div>
@@ -294,45 +327,45 @@ export default function AdminPage() {
 
   // Authenticated Admin Dashboard
   return (
-    <div className="min-h-screen bg-cream-100/60 flex flex-col">
+    <div className="min-h-screen bg-mist-50/60 flex flex-col">
       
-      {/* Top Admin Navbar */}
-      <nav className="bg-cream-50 border-b border-sand-300 sticky top-0 z-30 shadow-subtle">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+      {/* Top Navbar */}
+      <nav className="bg-white/80 backdrop-blur-xl border-b border-mist-200 sticky top-0 z-30 shadow-subtle">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
           <div className="flex items-center space-x-3">
             <Link
               href="/"
-              className="text-charcoal-600 hover:text-burgundy-700 p-1.5 rounded hover:bg-sand-100 transition-colors"
-              title="View Public Website"
+              className="text-slate-600 hover:text-teal-700 p-1.5 rounded-lg hover:bg-mist-100 transition-colors"
+              title="Return to Public Website"
             >
               <ArrowLeft className="w-5 h-5" />
             </Link>
             <div>
-              <span className="font-editorial text-lg font-bold text-charcoal-900 block leading-tight">
+              <span className="font-serif text-base sm:text-lg font-bold text-slate-900 block leading-tight">
                 {clinicConfig.name}
               </span>
-              <span className="text-[10px] uppercase tracking-wider text-burgundy-800 font-semibold">
-                Patient Leads & CRM
+              <span className="text-[10px] uppercase tracking-wider text-teal-700 font-semibold">
+                Showcase CRM · Demo Mode
               </span>
             </div>
           </div>
 
-          <div className="flex items-center space-x-2 sm:space-x-4">
+          <div className="flex items-center space-x-2 sm:space-x-3">
             <button
               onClick={() => {
                 setShowPasswordModal(true);
                 setPasswordChangeSuccess(null);
                 setPasswordChangeError(null);
               }}
-              className="inline-flex items-center space-x-1.5 px-3 py-2 rounded-lg text-xs font-semibold text-charcoal-700 bg-sand-100 hover:bg-sand-200 border border-sand-300 transition-colors"
+              className="inline-flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-semibold text-slate-700 bg-white hover:bg-mist-100 border border-mist-300 transition-colors shadow-subtle"
             >
-              <KeyRound className="w-3.5 h-3.5 text-burgundy-700" />
+              <KeyRound className="w-3.5 h-3.5 text-teal-600" />
               <span className="hidden sm:inline">Change Password</span>
             </button>
 
             <button
               onClick={handleLogout}
-              className="inline-flex items-center space-x-1.5 px-3 py-2 rounded-lg text-xs font-semibold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 transition-colors"
+              className="inline-flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-semibold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 transition-colors"
             >
               <LogOut className="w-3.5 h-3.5" />
               <span>Log Out</span>
@@ -341,120 +374,160 @@ export default function AdminPage() {
         </div>
       </nav>
 
-      {/* Main Admin Content */}
-      <main className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex-1 w-full">
+      {/* Main Admin Body */}
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex-1 w-full">
         
+        {/* Showcase Notice Banner */}
+        <div className="mb-6 p-4 rounded-2xl bg-gradient-to-r from-cyan-50 via-mint-50 to-white border border-mint-200 text-xs text-slate-700 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-subtle">
+          <div className="flex items-start sm:items-center space-x-2.5">
+            <Info className="w-4 h-4 text-teal-600 shrink-0 mt-0.5 sm:mt-0" />
+            <div>
+              <span className="font-semibold text-slate-900">Showcase Demonstration Storage:</span>{" "}
+              Inquiries are stored in this browser's local storage (maximum {MAX_DEMO_INQUIRIES} demo entries).
+              Submissions from other devices will not automatically sync without a connected shared cloud database.
+            </div>
+          </div>
+
+          <div className="flex items-center space-x-2 shrink-0 self-end sm:self-auto">
+            <button
+              type="button"
+              onClick={handleResetSamples}
+              className="px-2.5 py-1 text-[11px] font-semibold text-teal-800 bg-white hover:bg-mint-100 rounded-md border border-mint-300 transition-colors"
+            >
+              Reset Samples
+            </button>
+            <button
+              type="button"
+              onClick={handleClearAll}
+              className="px-2.5 py-1 text-[11px] font-semibold text-rose-700 bg-white hover:bg-rose-50 rounded-md border border-rose-200 transition-colors"
+            >
+              Clear Inquiries
+            </button>
+          </div>
+        </div>
+
         {/* Header & Controls */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
           <div>
-            <h1 className="font-editorial text-2xl sm:text-3xl font-bold text-charcoal-900">
-              Patient Inquiries ({leads.length})
+            <h1 className="font-serif text-2xl sm:text-3xl font-bold text-slate-900">
+              Patient Inquiries ({inquiries.length}/{MAX_DEMO_INQUIRIES})
             </h1>
-            <p className="text-xs sm:text-sm text-charcoal-600 mt-1">
-              Real patient inquiries saved from the website. Click any row to view complete details.
+            <p className="text-xs sm:text-sm text-slate-500 mt-1">
+              Click any inquiry to review complete details or contact the patient directly.
             </p>
           </div>
 
           <button
-            onClick={fetchLeads}
-            disabled={leadsLoading}
-            className="inline-flex items-center space-x-2 px-3.5 py-2 rounded-lg text-xs font-semibold text-charcoal-800 bg-cream-50 hover:bg-sand-100 border border-sand-300 shadow-subtle transition-colors shrink-0 self-start sm:self-auto"
+            onClick={loadInquiries}
+            className="inline-flex items-center space-x-2 px-3.5 py-2 rounded-xl text-xs font-semibold text-slate-800 bg-white hover:bg-mist-100 border border-mist-300 shadow-subtle transition-colors shrink-0 self-start sm:self-auto"
           >
-            <RefreshCw className={`w-3.5 h-3.5 text-burgundy-700 ${leadsLoading ? "animate-spin" : ""}`} />
-            <span>Refresh Leads</span>
+            <RefreshCw className="w-3.5 h-3.5 text-teal-600" />
+            <span>Refresh Storage</span>
           </button>
         </div>
 
-        {/* Error Notification */}
-        {leadsError && (
-          <div className="mb-6 p-4 rounded-xl bg-rose-50 border border-rose-200 text-rose-900 text-sm flex items-center space-x-3">
-            <AlertCircle className="w-5 h-5 text-rose-600 shrink-0" />
-            <span>{leadsError}</span>
-          </div>
-        )}
-
-        {/* Leads Table / Cards */}
-        {leadsLoading && leads.length === 0 ? (
-          <div className="bg-cream-50 rounded-2xl border border-sand-300 p-12 text-center shadow-subtle">
-            <RefreshCw className="w-6 h-6 animate-spin text-burgundy-700 mx-auto mb-3" />
-            <p className="text-sm font-medium text-charcoal-700">Loading inquiries from persistent database...</p>
-          </div>
-        ) : leads.length === 0 ? (
-          <div className="bg-cream-50 rounded-2xl border border-sand-300 p-12 text-center shadow-subtle">
-            <div className="w-12 h-12 rounded-full bg-sand-100 border border-sand-200 flex items-center justify-center text-charcoal-500 mx-auto mb-4">
+        {/* Empty State */}
+        {inquiries.length === 0 ? (
+          <div className="glass-panel rounded-3xl border border-white/90 p-12 text-center shadow-floating">
+            <div className="w-12 h-12 rounded-2xl bg-mist-100 border border-mist-200 flex items-center justify-center text-slate-400 mx-auto mb-4">
               <MessageCircle className="w-6 h-6" />
             </div>
-            <h3 className="font-editorial text-lg font-bold text-charcoal-900 mb-1">
-              No inquiries yet
+            <h3 className="font-serif text-lg font-bold text-slate-900 mb-1">
+              No inquiries in local storage
             </h3>
-            <p className="text-xs text-charcoal-600 max-w-sm mx-auto mb-6">
-              When visitors submit the inquiry form on the website, their details will appear here immediately.
+            <p className="text-xs text-slate-500 max-w-sm mx-auto mb-6">
+              When visitors submit the form on this device, entries will appear here (up to 10 max).
             </p>
-            <Link
-              href="/"
-              className="inline-flex items-center space-x-2 px-4 py-2 rounded-lg text-xs font-semibold text-white bg-burgundy-700 hover:bg-burgundy-800 transition-colors"
-            >
-              <span>Test Inquiry Form on Website</span>
-            </Link>
+            <div className="flex items-center justify-center space-x-3">
+              <button
+                onClick={handleResetSamples}
+                className="btn-primary-glow px-4 py-2 rounded-xl text-xs font-semibold"
+              >
+                Load Sample Demo Inquiries
+              </button>
+              <Link
+                href="/#contact"
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-700 bg-white hover:bg-mist-100 border border-mist-300"
+              >
+                Test Inquiry Form
+              </Link>
+            </div>
           </div>
         ) : (
-          <div className="bg-cream-50 rounded-2xl border border-sand-300 shadow-card overflow-hidden">
+          <div className="glass-panel rounded-3xl border border-white/90 shadow-floating overflow-hidden">
             
-            {/* Desktop Table */}
+            {/* Desktop Table View */}
             <div className="hidden md:block overflow-x-auto">
               <table className="w-full text-left border-collapse">
                 <thead>
-                  <tr className="bg-sand-100/70 border-b border-sand-200 text-[11px] font-semibold text-charcoal-600 uppercase tracking-wider">
+                  <tr className="bg-mist-100/80 border-b border-mist-200 text-[11px] font-semibold text-slate-600 uppercase tracking-wider">
                     <th className="py-3.5 px-6">Patient Name</th>
                     <th className="py-3.5 px-6">Phone Number</th>
                     <th className="py-3.5 px-6">Requested Service</th>
                     <th className="py-3.5 px-6">Preferred Date</th>
-                    <th className="py-3.5 px-6">Received</th>
+                    <th className="py-3.5 px-6">Submitted</th>
                     <th className="py-3.5 px-6 text-right">Actions</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-sand-200 text-sm">
-                  {leads.map((lead) => (
+                <tbody className="divide-y divide-mist-200 text-sm">
+                  {inquiries.map((inq) => (
                     <tr
-                      key={lead.id}
-                      onClick={() => setSelectedLead(lead)}
-                      className="hover:bg-sand-100/50 cursor-pointer transition-colors group"
+                      key={inq.id}
+                      onClick={() => setSelectedInquiry(inq)}
+                      className="hover:bg-cyan-50/30 cursor-pointer transition-colors group"
                     >
-                      <td className="py-4 px-6 font-semibold text-charcoal-900">
-                        {lead.fullName}
+                      <td className="py-4 px-6 font-semibold text-slate-900">
+                        <div className="flex items-center space-x-2">
+                          <span>{inq.fullName}</span>
+                          {inq.isDemoSample && (
+                            <span className="text-[10px] text-teal-700 bg-mint-100 px-1.5 py-0.2 rounded font-normal">
+                              Sample
+                            </span>
+                          )}
+                        </div>
                       </td>
-                      <td className="py-4 px-6 font-mono text-xs text-charcoal-800">
-                        {lead.phone}
+                      <td className="py-4 px-6 font-mono text-xs text-slate-800">
+                        {inq.phone}
                       </td>
-                      <td className="py-4 px-6 text-charcoal-700">
-                        <span className="inline-block px-2.5 py-1 rounded bg-sand-100 text-charcoal-800 text-xs font-medium border border-sand-200">
-                          {lead.service}
+                      <td className="py-4 px-6 text-slate-700">
+                        <span className="inline-block px-2.5 py-1 rounded-lg bg-mist-100 text-slate-800 text-xs font-medium border border-mist-200">
+                          {inq.service}
                         </span>
                       </td>
-                      <td className="py-4 px-6 text-xs text-charcoal-600">
-                        {lead.preferredDate ? (
-                          <span className="inline-flex items-center space-x-1 text-charcoal-800">
-                            <Calendar className="w-3.5 h-3.5 text-burgundy-700" />
-                            <span>{lead.preferredDate}</span>
+                      <td className="py-4 px-6 text-xs text-slate-600">
+                        {inq.preferredDate ? (
+                          <span className="inline-flex items-center space-x-1 text-slate-800">
+                            <Calendar className="w-3.5 h-3.5 text-teal-600" />
+                            <span>{inq.preferredDate}</span>
                           </span>
                         ) : (
-                          <span className="text-charcoal-400 italic">None requested</span>
+                          <span className="text-slate-400 italic">None specified</span>
                         )}
                       </td>
-                      <td className="py-4 px-6 text-xs text-charcoal-500">
-                        {formatDate(lead.createdAt)}
+                      <td className="py-4 px-6 text-xs text-slate-500">
+                        {formatDate(inq.createdAt)}
                       </td>
                       <td className="py-4 px-6 text-right">
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setSelectedLead(lead);
-                          }}
-                          className="text-xs font-semibold text-burgundy-700 group-hover:underline px-2 py-1"
-                        >
-                          View Details →
-                        </button>
+                        <div className="inline-flex items-center space-x-3">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedInquiry(inq);
+                            }}
+                            className="text-xs font-semibold text-teal-700 group-hover:underline"
+                          >
+                            View →
+                          </button>
+                          <button
+                            type="button"
+                            onClick={(e) => handleDeleteInquiry(inq.id, e)}
+                            className="p-1 rounded text-slate-400 hover:text-rose-600 hover:bg-rose-50"
+                            title="Delete demo inquiry"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -463,35 +536,44 @@ export default function AdminPage() {
             </div>
 
             {/* Mobile Cards View */}
-            <div className="md:hidden divide-y divide-sand-200">
-              {leads.map((lead) => (
+            <div className="md:hidden divide-y divide-mist-200">
+              {inquiries.map((inq) => (
                 <div
-                  key={lead.id}
-                  onClick={() => setSelectedLead(lead)}
-                  className="p-5 hover:bg-sand-100/40 transition-colors active:bg-sand-200/50 cursor-pointer space-y-3"
+                  key={inq.id}
+                  onClick={() => setSelectedInquiry(inq)}
+                  className="p-5 hover:bg-cyan-50/20 transition-colors active:bg-mist-100 cursor-pointer space-y-3"
                 >
                   <div className="flex items-start justify-between">
                     <div>
-                      <h3 className="font-semibold text-base text-charcoal-900">
-                        {lead.fullName}
+                      <h3 className="font-semibold text-base text-slate-900">
+                        {inq.fullName}
                       </h3>
-                      <p className="text-xs font-mono text-charcoal-600 mt-0.5">
-                        {lead.phone}
+                      <p className="text-xs font-mono text-slate-600 mt-0.5">
+                        {inq.phone}
                       </p>
                     </div>
-                    <span className="text-[10px] font-medium text-charcoal-500 bg-sand-100 px-2 py-0.5 rounded border border-sand-200">
-                      {formatDate(lead.createdAt)}
-                    </span>
+                    <div className="flex items-center space-x-2">
+                      <span className="text-[10px] font-medium text-slate-500 bg-mist-100 px-2 py-0.5 rounded border border-mist-200">
+                        {formatDate(inq.createdAt)}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={(e) => handleDeleteInquiry(inq.id, e)}
+                        className="p-1 text-slate-400 hover:text-rose-600"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
                   </div>
 
                   <div className="flex flex-wrap gap-2 text-xs">
-                    <span className="bg-sand-100 text-charcoal-800 px-2.5 py-1 rounded border border-sand-200 font-medium">
-                      {lead.service}
+                    <span className="bg-mist-100 text-slate-800 px-2.5 py-1 rounded-md border border-mist-200 font-medium">
+                      {inq.service}
                     </span>
-                    {lead.preferredDate && (
-                      <span className="bg-cream-50 text-charcoal-700 px-2 py-1 rounded border border-sand-200 flex items-center space-x-1">
-                        <Calendar className="w-3 h-3 text-burgundy-700" />
-                        <span>{lead.preferredDate}</span>
+                    {inq.preferredDate && (
+                      <span className="bg-white text-slate-700 px-2 py-1 rounded-md border border-mist-200 flex items-center space-x-1">
+                        <Calendar className="w-3 h-3 text-teal-600" />
+                        <span>{inq.preferredDate}</span>
                       </span>
                     )}
                   </div>
@@ -504,65 +586,64 @@ export default function AdminPage() {
 
       </main>
 
-      {/* Lead Detail Modal */}
-      {selectedLead && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-charcoal-900/60 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-cream-50 rounded-2xl border border-sand-300 shadow-dropdown max-w-lg w-full p-6 sm:p-8 overflow-hidden relative animate-in zoom-in-95 duration-200">
+      {/* Inquiry Detail Modal */}
+      {selectedInquiry && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in">
+          <div className="glass-panel bg-white/95 rounded-3xl border border-white max-w-lg w-full p-6 sm:p-8 relative shadow-floating animate-in zoom-in-95">
             
-            <div className="flex items-center justify-between pb-4 border-b border-sand-200">
-              <div className="flex items-center space-x-2">
-                <div className="w-8 h-8 rounded-full bg-burgundy-50 border border-burgundy-100 flex items-center justify-center text-burgundy-700">
-                  <User className="w-4 h-4" />
+            <div className="flex items-center justify-between pb-4 border-b border-mist-200">
+              <div className="flex items-center space-x-2.5">
+                <div className="w-9 h-9 rounded-xl bg-cyan-100 border border-cyan-200 flex items-center justify-center text-teal-700">
+                  <User className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 className="font-editorial text-xl font-bold text-charcoal-900">
+                  <h3 className="font-serif text-xl font-bold text-slate-900">
                     Patient Inquiry Details
                   </h3>
-                  <p className="text-[11px] text-charcoal-500">
-                    ID: {selectedLead.id}
+                  <p className="text-[11px] text-slate-500">
+                    ID: {selectedInquiry.id}
                   </p>
                 </div>
               </div>
 
               <button
-                onClick={() => setSelectedLead(null)}
-                className="p-1.5 rounded-lg text-charcoal-500 hover:text-charcoal-800 hover:bg-sand-100"
+                onClick={() => setSelectedInquiry(null)}
+                className="p-1.5 rounded-lg text-slate-500 hover:text-slate-800 hover:bg-mist-100"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
             <div className="py-6 space-y-4 text-sm">
-              
               <div>
-                <span className="text-[11px] font-semibold uppercase tracking-wider text-charcoal-500 block mb-1">
+                <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 block mb-1">
                   Full Name
                 </span>
-                <p className="text-base font-bold text-charcoal-900">
-                  {selectedLead.fullName}
+                <p className="text-base font-bold text-slate-900">
+                  {selectedInquiry.fullName}
                 </p>
               </div>
 
               <div>
-                <span className="text-[11px] font-semibold uppercase tracking-wider text-charcoal-500 block mb-1">
+                <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 block mb-1">
                   Phone Number
                 </span>
                 <div className="flex items-center space-x-3">
-                  <span className="text-base font-mono font-medium text-charcoal-900">
-                    {selectedLead.phone}
+                  <span className="text-base font-mono font-medium text-slate-900">
+                    {selectedInquiry.phone}
                   </span>
                   <a
-                    href={`tel:${selectedLead.phone}`}
-                    className="inline-flex items-center space-x-1 text-xs font-semibold text-white bg-burgundy-700 hover:bg-burgundy-800 px-3 py-1.5 rounded transition-colors"
+                    href={`tel:${selectedInquiry.phone}`}
+                    className="btn-primary-glow inline-flex items-center space-x-1 text-xs font-semibold px-3 py-1.5 rounded-lg"
                   >
                     <Phone className="w-3.5 h-3.5" />
-                    <span>Call Patient</span>
+                    <span>Call</span>
                   </a>
                   <a
-                    href={`https://wa.me/${selectedLead.phone.replace(/[^0-9]/g, "")}`}
+                    href={`https://wa.me/${selectedInquiry.phone.replace(/[^0-9]/g, "")}`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex items-center space-x-1 text-xs font-semibold text-emerald-800 bg-emerald-100 hover:bg-emerald-200 px-3 py-1.5 rounded transition-colors"
+                    className="inline-flex items-center space-x-1 text-xs font-semibold text-teal-800 bg-mint-100 hover:bg-mint-200 px-3 py-1.5 rounded-lg border border-mint-300"
                   >
                     <MessageCircle className="w-3.5 h-3.5" />
                     <span>WhatsApp</span>
@@ -570,64 +651,72 @@ export default function AdminPage() {
                 </div>
               </div>
 
-              {selectedLead.telegramUsername && (
+              {selectedInquiry.telegramUsername && (
                 <div>
-                  <span className="text-[11px] font-semibold uppercase tracking-wider text-charcoal-500 block mb-1">
+                  <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 block mb-1">
                     Telegram Username
                   </span>
                   <a
-                    href={`https://t.me/${selectedLead.telegramUsername}`}
+                    href={`https://t.me/${selectedInquiry.telegramUsername}`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-burgundy-700 font-mono hover:underline inline-flex items-center space-x-1"
+                    className="text-teal-700 font-mono hover:underline inline-flex items-center space-x-1 text-sm font-medium"
                   >
-                    <span>@{selectedLead.telegramUsername}</span>
+                    <span>@{selectedInquiry.telegramUsername}</span>
                     <Send className="w-3.5 h-3.5" />
                   </a>
                 </div>
               )}
 
               <div>
-                <span className="text-[11px] font-semibold uppercase tracking-wider text-charcoal-500 block mb-1">
+                <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 block mb-1">
                   Requested Service / Reason
                 </span>
-                <p className="text-sm font-medium text-charcoal-800 bg-sand-100 p-3 rounded-lg border border-sand-200">
-                  {selectedLead.service}
+                <p className="text-sm font-medium text-slate-800 bg-mist-100 p-3 rounded-xl border border-mist-200">
+                  {selectedInquiry.service}
                 </p>
               </div>
 
               <div>
-                <span className="text-[11px] font-semibold uppercase tracking-wider text-charcoal-500 block mb-1">
+                <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 block mb-1">
                   Preferred Contact / Visit Date
                 </span>
-                <p className="text-sm text-charcoal-800">
-                  {selectedLead.preferredDate ? (
-                    <span className="font-medium text-charcoal-900">
-                      {selectedLead.preferredDate} (Requested date, not yet confirmed)
+                <p className="text-sm text-slate-800">
+                  {selectedInquiry.preferredDate ? (
+                    <span className="font-medium text-slate-900">
+                      {selectedInquiry.preferredDate} (Requested date, pending confirmation)
                     </span>
                   ) : (
-                    <span className="text-charcoal-500 italic">No specific date requested</span>
+                    <span className="text-slate-400 italic">No specific date requested</span>
                   )}
                 </p>
               </div>
 
               <div>
-                <span className="text-[11px] font-semibold uppercase tracking-wider text-charcoal-500 block mb-1">
+                <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 block mb-1">
                   Submission Timestamp
                 </span>
-                <p className="text-xs text-charcoal-600 flex items-center space-x-1">
-                  <Clock className="w-3.5 h-3.5 text-sand-400" />
-                  <span>{formatDate(selectedLead.createdAt)} (UTC: {selectedLead.createdAt})</span>
+                <p className="text-xs text-slate-600 flex items-center space-x-1">
+                  <Clock className="w-3.5 h-3.5 text-slate-400" />
+                  <span>{formatDate(selectedInquiry.createdAt)}</span>
                 </p>
               </div>
-
             </div>
 
-            <div className="pt-4 border-t border-sand-200 flex justify-end">
+            <div className="pt-4 border-t border-mist-200 flex justify-between items-center">
               <button
                 type="button"
-                onClick={() => setSelectedLead(null)}
-                className="px-4 py-2 rounded-lg text-xs font-semibold text-charcoal-700 bg-sand-100 hover:bg-sand-200 transition-colors"
+                onClick={(e) => handleDeleteInquiry(selectedInquiry.id, e)}
+                className="text-xs text-rose-600 hover:text-rose-700 flex items-center space-x-1"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Delete Entry</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setSelectedInquiry(null)}
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-700 bg-mist-100 hover:bg-mist-200 transition-colors"
               >
                 Close
               </button>
@@ -639,36 +728,36 @@ export default function AdminPage() {
 
       {/* Change Password Modal */}
       {showPasswordModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-charcoal-900/60 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-cream-50 rounded-2xl border border-sand-300 shadow-dropdown max-w-md w-full p-6 sm:p-8 relative animate-in zoom-in-95 duration-200">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in">
+          <div className="glass-panel bg-white/95 rounded-3xl border border-white max-w-md w-full p-6 sm:p-8 relative shadow-floating animate-in zoom-in-95">
             
-            <div className="flex items-center justify-between pb-4 border-b border-sand-200">
-              <div className="flex items-center space-x-2">
-                <div className="w-8 h-8 rounded-full bg-burgundy-50 border border-burgundy-100 flex items-center justify-center text-burgundy-700">
+            <div className="flex items-center justify-between pb-4 border-b border-mist-200">
+              <div className="flex items-center space-x-2.5">
+                <div className="w-8 h-8 rounded-xl bg-mint-100 border border-mint-200 flex items-center justify-center text-teal-700">
                   <KeyRound className="w-4 h-4" />
                 </div>
-                <h3 className="font-editorial text-lg font-bold text-charcoal-900">
+                <h3 className="font-serif text-lg font-bold text-slate-900">
                   Change Admin Password
                 </h3>
               </div>
 
               <button
                 onClick={() => setShowPasswordModal(false)}
-                className="p-1.5 rounded-lg text-charcoal-500 hover:text-charcoal-800 hover:bg-sand-100"
+                className="p-1.5 rounded-lg text-slate-500 hover:text-slate-800 hover:bg-mist-100"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
             {passwordChangeSuccess && (
-              <div className="my-4 p-3.5 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs flex items-start space-x-2">
-                <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+              <div className="my-4 p-3.5 rounded-xl bg-mint-50 border border-mint-200 text-teal-900 text-xs flex items-start space-x-2">
+                <CheckCircle className="w-4 h-4 text-teal-600 shrink-0 mt-0.5" />
                 <span>{passwordChangeSuccess}</span>
               </div>
             )}
 
             {passwordChangeError && (
-              <div className="my-4 p-3.5 rounded-lg bg-rose-50 border border-rose-200 text-rose-900 text-xs flex items-start space-x-2">
+              <div className="my-4 p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-900 text-xs flex items-start space-x-2">
                 <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
                 <span>{passwordChangeError}</span>
               </div>
@@ -676,7 +765,7 @@ export default function AdminPage() {
 
             <form onSubmit={handleChangePassword} className="space-y-4 pt-4">
               <div>
-                <label className="block text-xs font-semibold text-charcoal-800 uppercase tracking-wider mb-1.5">
+                <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
                   Current Password
                 </label>
                 <input
@@ -685,12 +774,12 @@ export default function AdminPage() {
                   value={currentPassword}
                   onChange={(e) => setCurrentPassword(e.target.value)}
                   placeholder="Enter current password"
-                  className="w-full px-3.5 py-2.5 rounded-lg bg-cream-50 border border-sand-300 text-charcoal-900 text-sm focus:outline-none focus:ring-2 focus:ring-burgundy-600"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-white border border-mist-300 text-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-charcoal-800 uppercase tracking-wider mb-1.5">
+                <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
                   New Password (min 8 chars)
                 </label>
                 <input
@@ -698,13 +787,13 @@ export default function AdminPage() {
                   required
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}
-                  placeholder="Enter new strong password"
-                  className="w-full px-3.5 py-2.5 rounded-lg bg-cream-50 border border-sand-300 text-charcoal-900 text-sm focus:outline-none focus:ring-2 focus:ring-burgundy-600"
+                  placeholder="Enter new password"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-white border border-mist-300 text-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-charcoal-800 uppercase tracking-wider mb-1.5">
+                <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
                   Confirm New Password
                 </label>
                 <input
@@ -713,7 +802,7 @@ export default function AdminPage() {
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
                   placeholder="Confirm new password"
-                  className="w-full px-3.5 py-2.5 rounded-lg bg-cream-50 border border-sand-300 text-charcoal-900 text-sm focus:outline-none focus:ring-2 focus:ring-burgundy-600"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-white border border-mist-300 text-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
                 />
               </div>
 
@@ -721,16 +810,16 @@ export default function AdminPage() {
                 <button
                   type="button"
                   onClick={() => setShowPasswordModal(false)}
-                  className="px-4 py-2.5 rounded-lg text-xs font-semibold text-charcoal-700 bg-sand-100 hover:bg-sand-200 transition-colors"
+                  className="px-4 py-2.5 rounded-xl text-xs font-semibold text-slate-700 bg-mist-100 hover:bg-mist-200 transition-colors"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={passwordChangeLoading}
-                  className="px-4 py-2.5 rounded-lg text-xs font-semibold text-white bg-burgundy-700 hover:bg-burgundy-800 disabled:bg-burgundy-500 transition-colors"
+                  className="btn-primary-glow px-4 py-2.5 rounded-xl text-xs font-semibold disabled:opacity-50"
                 >
-                  {passwordChangeLoading ? "Updating..." : "Save New Password"}
+                  {passwordChangeLoading ? "Updating..." : "Save Password"}
                 </button>
               </div>
             </form>

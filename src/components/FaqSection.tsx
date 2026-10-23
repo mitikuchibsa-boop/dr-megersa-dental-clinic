@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, HelpCircle, Sparkles } from "lucide-react";
 
 interface FaqItem {
   id: string;
@@ -40,28 +40,29 @@ export function FaqSection() {
   };
 
   return (
-    <section className="py-16 md:py-24 bg-cream-50">
+    <section className="py-16 md:py-24 relative overflow-hidden">
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
         
         <div className="text-center max-w-xl mx-auto mb-12">
-          <div className="inline-flex items-center space-x-2 mb-3">
-            <span className="w-1.5 h-1.5 rounded-full bg-burgundy-700"></span>
-            <span className="text-xs font-semibold uppercase tracking-widest text-burgundy-800">
+          <div className="inline-flex items-center space-x-2 px-3.5 py-1.5 rounded-full bg-white/90 border border-mint-200 shadow-subtle mb-3">
+            <HelpCircle className="w-3.5 h-3.5 text-teal-600" />
+            <span className="text-xs font-semibold uppercase tracking-wider text-slate-800">
               FREQUENTLY ASKED
             </span>
           </div>
-          <h2 className="font-editorial text-2xl sm:text-3xl md:text-4xl font-bold text-charcoal-900 leading-tight">
+
+          <h2 className="font-serif text-2xl sm:text-3xl md:text-4xl font-bold text-slate-900 leading-tight">
             Questions you may have.
           </h2>
         </div>
 
-        <div className="space-y-4">
+        <div className="space-y-3.5">
           {faqs.map((faq) => {
             const isOpen = openId === faq.id;
             return (
               <div
                 key={faq.id}
-                className="bg-sand-100/70 border border-sand-200 rounded-xl overflow-hidden transition-all shadow-subtle"
+                className="glass-card rounded-2xl overflow-hidden transition-all shadow-subtle border border-mist-200"
               >
                 <button
                   type="button"
@@ -75,14 +76,14 @@ export function FaqSection() {
                       toggleAccordion(faq.id);
                     }
                   }}
-                  className="w-full flex items-center justify-between text-left p-5 sm:p-6 focus:outline-none focus:bg-sand-200/50 hover:bg-sand-100 transition-colors"
+                  className="w-full flex items-center justify-between text-left p-5 sm:p-6 focus:outline-none hover:bg-cyan-50/30 transition-colors"
                 >
-                  <span className="font-editorial text-lg sm:text-xl font-bold text-charcoal-900 pr-4">
+                  <span className="font-serif text-base sm:text-lg font-bold text-slate-900 pr-4">
                     {faq.question}
                   </span>
                   <div
-                    className={`h-7 w-7 rounded-full bg-cream-50 border border-sand-300 flex items-center justify-center text-charcoal-700 shrink-0 transform transition-transform duration-200 ${
-                      isOpen ? "rotate-180 text-burgundy-700 border-burgundy-200" : ""
+                    className={`h-8 w-8 rounded-full bg-mist-100 border border-mist-300 flex items-center justify-center text-slate-700 shrink-0 transform transition-transform duration-200 ${
+                      isOpen ? "rotate-180 text-teal-700 bg-mint-100 border-mint-300" : ""
                     }`}
                   >
                     <ChevronDown className="w-4 h-4" />
@@ -97,7 +98,7 @@ export function FaqSection() {
                   data-open={isOpen}
                 >
                   <div className="accordion-inner">
-                    <div className="p-5 sm:p-6 pt-0 sm:pt-0 text-sm sm:text-base text-charcoal-700 leading-relaxed border-t border-sand-200/60 mt-1">
+                    <div className="p-5 sm:p-6 pt-0 sm:pt-0 text-sm sm:text-base text-slate-600 leading-relaxed border-t border-mist-200/60 mt-1">
                       {faq.answer}
                     </div>
                   </div>

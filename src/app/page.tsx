@@ -3,6 +3,7 @@
 import React, { useState } from "react";
 import { Header } from "@/components/Header";
 import { Hero } from "@/components/Hero";
+import { TrustStrip } from "@/components/TrustStrip";
 import { ClinicIntro } from "@/components/ClinicIntro";
 import { DoctorIntro } from "@/components/DoctorIntro";
 import { ServicesSection } from "@/components/ServicesSection";
@@ -29,45 +30,49 @@ export default function HomePage() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col bg-cream-50 text-charcoal-900 selection:bg-burgundy-100 selection:text-burgundy-900">
-      {/* Navigation */}
+    <div className="min-h-screen flex flex-col bg-white text-slate-900 selection:bg-mint-200 selection:text-slate-900">
+      
+      {/* 1. Elegant floating navigation */}
       <Header />
 
-      {/* Main Content */}
       <main className="flex-1">
-        {/* Hero Section */}
+        {/* 2. Visually striking hero */}
         <Hero
           onContactClick={() => scrollToSection("contact")}
           onExploreClick={() => scrollToSection("services")}
         />
 
-        {/* Clinic Introduction (Reception image) */}
+        {/* 3. Compact trust/identity strip (Afaan Oromo & Amharic brand phrases) */}
+        <TrustStrip />
+
+        {/* 4. Clinic introduction (Real reception photograph) */}
         <ClinicIntro onContactClick={() => scrollToSection("contact")} />
 
-        {/* Doctor Introduction (Dr Megersa portrait) */}
+        {/* 5. Doctor profile (Dr Megersa actual photograph) */}
         <DoctorIntro onContactClick={() => scrollToSection("contact")} />
 
-        {/* Services Section */}
+        {/* 6. Dental services responsive grid */}
         <ServicesSection onSelectService={handleSelectService} />
 
-        {/* Patient Experience Guidance */}
+        {/* 7. Patient inquiry call-to-action */}
         <PatientExperience onContactClick={() => scrollToSection("contact")} />
 
-        {/* Gallery / Clinic Work (Reception, Doctor, Treatment) */}
+        {/* 8. Editorial-style gallery (Three real clinic photos) */}
         <GallerySection />
 
-        {/* Frequently Asked Questions */}
+        {/* 9. Clean, well-designed FAQs */}
         <FaqSection />
 
-        {/* Contact & Real Inquiry Form */}
+        {/* 10. Contact section with inquiry form, phones, email, social & map */}
         <ContactSection selectedService={selectedService} />
       </main>
 
-      {/* Footer */}
+      {/* 11. Refined footer */}
       <Footer />
 
-      {/* Mobile Sticky Action Bar */}
+      {/* Mobile Sticky Quick Action Bar */}
       <MobileBottomBar />
+
     </div>
   );
 }
