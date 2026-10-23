@@ -42,6 +42,9 @@ export default function AdminPage() {
   const [loginError, setLoginError] = useState<string | null>(null);
   const [loginLoading, setLoginLoading] = useState(false);
   const [showRecoveryHelp, setShowRecoveryHelp] = useState(false);
+  const [lockoutResetAt, setLockoutResetAt] = useState<number | null>(null);
+  const [lockoutSecondsLeft, setLockoutSecondsLeft] = useState(0);
+  const [resetLockoutLoading, setResetLockoutLoading] = useState(false);
 
   // Inquiries from browser storage
   const [inquiries, setInquiries] = useState<DemoInquiry[]>([]);
@@ -61,6 +64,19 @@ export default function AdminPage() {
     checkAuth();
     loadInquiries();
   }, []);
+
+  // Lockout countdown timer
+  useEffect(() => {
+    if (!lockoutResetAt) return;
+    const tick = () => {
+      const secs = Math.max(0, Math.ceil((lockoutResetAt - Date.now()) / 1000));
+      setLockoutSecondsLeft(secs);
+      if (secs === 0) setLockoutResetAt(null);
+    };
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [lockoutResetAt]);
 
   const checkAuth = async () => {
     try {
@@ -91,16 +107,34 @@ export default function AdminPage() {
 
       const data = await res.json();
       if (!res.ok) {
+        if (data.rateLimited && data.resetAt) {
+          setLockoutResetAt(data.resetAt);
+          setShowRecoveryHelp(true);
+        }
         throw new Error(data.error || "Login failed");
       }
 
       setIsAuthenticated(true);
       setPassword("");
+      setLockoutResetAt(null);
       loadInquiries();
     } catch (err: any) {
       setLoginError(err.message || "Invalid credentials");
     } finally {
       setLoginLoading(false);
+    }
+  };
+
+  const handleResetLockout = async () => {
+    setResetLockoutLoading(true);
+    try {
+      await fetch("/api/admin/reset-lockout", { method: "POST" });
+      setLockoutResetAt(null);
+      setLoginError(null);
+    } catch {
+      // Ignore — the lockout will expire naturally
+    } finally {
+      setResetLockoutLoading(false);
     }
   };
 
@@ -237,9 +271,26 @@ export default function AdminPage() {
           <div className="glass-panel py-8 px-6 sm:px-10 rounded-3xl border border-white/90 shadow-floating">
             
             {loginError && (
-              <div className="mb-6 p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs flex items-start space-x-2 animate-in fade-in">
-                <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
-                <span>{loginError}</span>
+              <div className="mb-6 p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs flex flex-col space-y-2 animate-in fade-in">
+                <div className="flex items-start space-x-2">
+                  <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                  <span>{loginError}</span>
+                </div>
+                {lockoutResetAt && lockoutSecondsLeft > 0 && (
+                  <div className="flex items-center justify-between pl-6">
+                    <span className="text-rose-700 font-mono font-semibold">
+                      Unlocks in: {lockoutSecondsLeft}s
+                    </span>
+                    <button
+                      type="button"
+                      onClick={handleResetLockout}
+                      disabled={resetLockoutLoading}
+                      className="text-[11px] font-semibold text-teal-700 bg-white hover:bg-cyan-50 border border-cyan-200 px-2.5 py-1 rounded-md disabled:opacity-50"
+                    >
+                      {resetLockoutLoading ? "Clearing…" : "Clear Lockout"}
+                    </button>
+                  </div>
+                )}
               </div>
             )}
 
