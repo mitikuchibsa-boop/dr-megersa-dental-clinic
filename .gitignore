@@ -1,0 +1,36 @@
+# Dependencies
+/node_modules
+/.pnp
+.pnp.js
+
+# Testing & screenshots
+/test-screenshots
+/coverage
+
+# Next.js build output
+/.next/
+/out/
+
+# Production & Local Database files
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+
+# Environment variables & secrets
+.env*.local
+.env
+!.env.example
+
+# Debug logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# Vercel
+.vercel
+
+# Operating System files
+.DS_Store
+Thumbs.db
